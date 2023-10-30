@@ -1,0 +1,173 @@
+---
+title: "Intro to Tidyverse WS-1"
+author: "Amanda"
+date: "2023-10-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Install packages and load libraries
+```{r}
+#install.packages("tidyverse")
+#install.packages("skimr")
+
+library(tidyverse)
+library(skimr)
+```
+
+Read the dataset into our environment.
+
+Step 1. Download it from this website, and then upload it into Rstudio cloud - 
+ https://www.kaggle.com/datasets/gabrielsantello/wholesale-and-retail-orders-dataset/code
+
+Step 2. Assign the csv files to the dataframes 
+```{r}
+orders <- read_csv("orders.csv")
+product <- read_csv("product-supplier.csv")
+
+```
+
+Look at the overall structure of the datasets
+```{r}
+glimpse(orders)
+glimpse(product)
+
+```
+
+use the head function to see the first few rows or the tail function to see the last few rows
+```{r}
+head(orders, 10)
+tail(product, 5)
+
+```
+
+We will use a function from the janitor package to clean up the variable names.
+Remember - install.packages once and activate the libraries every script/rmd file
+
+```{r}
+#install.packages("janitor")
+library(janitor)
+```
+
+Clean the variable names in the orders dataframe
+```{r}
+orders <- clean_names(orders)
+glimpse(orders)
+
+```
+
+Convert the date columns to from character types to date format. We will use the Lubridate package to do this - this has already been installed and activated as a part of the tidyverse.
+
+```{r}
+orders$delivery_date <- dmy(orders$delivery_date)
+orders$date_order_was_placed <- dmy(orders$date_order_was_placed)
+glimpse(orders)
+
+```
+
+Plot a histogram of the order values
+```{r}
+ggplot(data = orders, aes(x = total_retail_price_for_this_order)) + geom_histogram()
+
+```
+
+This is quite skewed with a few large value orders. Lets look at this a bit closer
+
+```{r}
+
+orders %>% filter(total_retail_price_for_this_order <=2000) %>% 
+  ggplot(aes(x = total_retail_price_for_this_order))+
+  geom_histogram(bins = 100) + theme_light()
+
+```
+
+Review Customer status
+```{r}
+orders %>% count(customer_status)
+```
+
+Clean the values and convert them to factors
+
+```{r}
+orders$customer_status <- str_to_lower(orders$customer_status)
+orders %>% count(customer_status)
+
+orders$customer_status <- as_factor(orders$customer_status)
+
+glimpse(orders)
+
+```
+
+How to apply this across multiple columns - but you will need to assign it to the data frame to apply
+
+```{r}
+orders <- orders %>%  
+  mutate(across(all_of(c("customer_id","product_id")), as.factor))
+glimpse(orders)
+
+```
+
+How many orders and products per order
+```{r}
+orders %>% count(order_id, sort = TRUE)
+
+orders %>% count(product_id, sort = TRUE)
+
+orders %>% count(order_id, product_id, sort = TRUE)
+```
+
+Find the retail value of the items and add this as a new column
+```{r}
+
+orders <- orders %>% mutate(product_retail_value = total_retail_price_for_this_order/quantity_ordered)
+
+average_orders <- orders %>% 
+  group_by(product_id) %>% 
+  mutate(cost_price_per_unit = mean(cost_price_per_unit)) %>% 
+  mutate(product_retail_value = mean(product_retail_value)) %>% 
+  arrange(desc(product_retail_value)) %>% 
+  distinct(product_id, cost_price_per_unit, product_retail_value)
+```
+
+Lets join the two dataframes together on the product_id column. First clean the names and convert the product_id in the product df to a factor.
+```{r}
+glimpse(product)
+
+product <- clean_names(product)
+
+product <- product %>%  
+  mutate(across(all_of(c("product_id","supplier_id")), as.factor))
+
+glimpse(product)
+
+sales <- inner_join(orders, product)
+
+```
+
+Calculate and plot the profit margin
+```{r}
+sales <- sales %>% 
+  mutate(sales_margin = product_retail_value - cost_price_per_unit)
+
+sales <- sales %>% rename(wholesale_price = cost_price_per_unit, retail_price = product_retail_value)
+glimpse(sales)
+
+library(viridis)
+sales %>% ggplot(aes(x = wholesale_price, y = retail_price, colour = product_category))+ geom_point()+ theme_minimal() + scale_colour_viridis(discrete = TRUE, option = "D")+
+  facet_wrap(~ product_category, ncol = 3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
